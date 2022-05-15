@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const app = express();
@@ -23,12 +24,34 @@ async function run() {
       .db("doctors_portal")
       .collection("services");
     const bookingCollection = client.db("doctors_portal").collection("booking");
+    const userCollection = client.db("doctors_portal").collection("user");
 
     app.get("/services", async (req, res) => {
       const query = {};
       const cursor = servicesCollection.find(query);
       const services = await cursor.toArray();
       res.send(services);
+    });
+
+    app.put("/user/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = req.body;
+      const filter = { email: email };
+      const options = { upsert: true };
+      const updatedDoc = {
+        $set: user,
+      };
+      const result = await userCollection.updateOne(
+        filter,
+        updatedDoc,
+        options
+      );
+      const token = jwt.sign(
+        { email: email },
+        process.env.ACCESS_TOKEN_SECRET,
+        { expiresIn: "1h" }
+      );
+      res.send({ result, token });
     });
 
     // warning
@@ -40,20 +63,24 @@ async function run() {
       // step 1: get all services
       const services = await servicesCollection.find().toArray();
 
-      // step 2: get the booking of the date
+      // step 2: get the booking of the date output: [{},{},{},{},{},{},{},{}]
       const query = { date: date };
       const bookings = await bookingCollection.find(query).toArray();
 
       // step 3: for each service, find booking for that service
       services.forEach((service) => {
+        // step 4: find booking for that service output: [{},{},{}, {}]
         const serviceBookings = bookings.filter(
-          (b) => b.treatment === service.name
+          (book) => book.treatment === service.name
         );
-        const booked = serviceBookings.map((s) => s.slot);
+        // step 5: select slots for the service booking: ["", "", "", ""]
+        const bookedSlots = serviceBookings.map((book) => book.slot);
+        // step 6: select those slots that are not in bookedSlots
         const available = service.slots.filter(
-          (slot) => !booked.includes(slot)
+          (slot) => !bookedSlots.includes(slot)
         );
-        service.available = available;
+        // step 7: set available to slots to make it easier
+        service.slots = available;
       });
 
       res.send(services);
@@ -70,7 +97,12 @@ async function run() {
      * app.patch('/booking/:id') //
      * app.delete('/booking/:id') //
      */
-
+    app.get("/booking", async (req, res) => {
+      const patient = req.query.patient;
+      const query = { patient: patient };
+      const bookings = await bookingCollection.find(query).toArray();
+      res.send(bookings);
+    });
     app.post("/booking", async (req, res) => {
       const booking = req.body;
       const query = {
