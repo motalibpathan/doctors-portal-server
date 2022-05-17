@@ -5,6 +5,8 @@ require("dotenv").config();
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 5000;
+var nodemailer = require("nodemailer");
+var sgTransport = require("nodemailer-sendgrid-transport");
 
 app.use(cors());
 app.use(express.json());
@@ -29,6 +31,41 @@ function verifyJWT(req, res, next) {
     }
     req.decoded = decoded;
     next();
+  });
+}
+
+const emailSenderOptions = {
+  auth: {
+    api_key: process.env.EMAIL_SENDER_KEY,
+  },
+};
+
+const emailClient = nodemailer.createTransport(sgTransport(emailSenderOptions));
+
+function sendAppointmentEmail(booking) {
+  const { patient, patientName, treatment, date, slot } = booking;
+
+  const email = {
+    from: process.env.EMAIL_SENDER,
+    to: patient,
+    subject: `Your appointment for ${treatment} is on ${date} at ${slot} is confirmed!`,
+    text: `Your appointment for ${treatment} is on ${date} at ${slot} is confirmed!`,
+    html: `<div>
+      <h1>Hello ${patientName}</h1>
+      <h3>Your Appointment for ${treatment}</h3>
+      <p>Looking forward to seeing you on ${date}</p>
+      <h3>Our Address</h3>
+      <p>Andor Killa Bandorban</p>
+      <p>Bangladesh</p>
+      <a href="https://web.programming-hero.com/">unsubscribe</a>
+    <div>`,
+  };
+  emailClient.sendMail(email, function (err, info) {
+    if (err) {
+      console.log(err);
+    } else {
+      console.log("message send: ", info);
+    }
   });
 }
 
@@ -99,7 +136,7 @@ async function run() {
       const token = jwt.sign(
         { email: email },
         process.env.ACCESS_TOKEN_SECRET,
-        { expiresIn: "1h" }
+        { expiresIn: "1d" }
       );
       res.send({ result, token });
     });
@@ -170,6 +207,9 @@ async function run() {
         return res.send({ success: false, booking: exits });
       }
       const result = await bookingCollection.insertOne(booking);
+      // console.log("sending email");
+      // sendAppointmentEmail(booking);
+
       return res.send({ success: true, result });
     });
 
