@@ -40,10 +40,25 @@ async function run() {
       .collection("services");
     const bookingCollection = client.db("doctors_portal").collection("booking");
     const userCollection = client.db("doctors_portal").collection("user");
+    const doctorCollection = client.db("doctors_portal").collection("doctors");
+
+    const verifyAdmin = async (req, res, next) => {
+      const requester = req.decoded.email;
+      const requesterAccount = await userCollection.findOne({
+        email: requester,
+      });
+      console.log(requesterAccount);
+
+      if (requesterAccount.role === "admin") {
+        next();
+      } else {
+        res.status(403).send({ message: "forbidden" });
+      }
+    };
 
     app.get("/services", async (req, res) => {
       const query = {};
-      const cursor = servicesCollection.find(query);
+      const cursor = servicesCollection.find(query).project({ name: 1 });
       const services = await cursor.toArray();
       res.send(services);
     });
@@ -60,24 +75,13 @@ async function run() {
       res.send({ admin: isAdmin });
     });
 
-    app.put("/user/admin/:email", verifyJWT, async (req, res) => {
+    app.put("/user/admin/:email", verifyJWT, verifyAdmin, async (req, res) => {
       const email = req.params.email;
-      const requester = req.decoded.email;
-      const requesterAccount = await userCollection.findOne({
-        email: requester,
-      });
+      const filter = { email: email };
 
-      if (requesterAccount.role === "admin") {
-        const filter = { email: email };
-        const updatedDoc = {
-          $set: { role: "admin" },
-        };
-        const result = await userCollection.updateOne(filter, updatedDoc);
-
-        res.send(result);
-      } else {
-        res.status(403).send({ message: "forbidden" });
-      }
+      const updatedDoc = { $set: { role: "admin" } };
+      const result = await userCollection.updateOne(filter, updatedDoc);
+      res.send(result);
     });
 
     app.put("/user/:email", async (req, res) => {
@@ -168,6 +172,12 @@ async function run() {
       }
       const result = await bookingCollection.insertOne(booking);
       return res.send({ success: true, result });
+    });
+
+    app.post("/doctor", verifyJWT, verifyAdmin, async (req, res) => {
+      const doctor = req.body;
+      const result = await doctorCollection.insertOne(doctor);
+      res.send(result);
     });
   } finally {
   }
