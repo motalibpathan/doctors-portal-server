@@ -47,7 +47,6 @@ async function run() {
       const requesterAccount = await userCollection.findOne({
         email: requester,
       });
-      console.log(requesterAccount);
 
       if (requesterAccount.role === "admin") {
         next();
@@ -172,6 +171,11 @@ async function run() {
       }
       const result = await bookingCollection.insertOne(booking);
       return res.send({ success: true, result });
+    });
+
+    app.get("/doctor", verifyJWT, verifyAdmin, async (req, res) => {
+      const result = await doctorCollection.find().toArray();
+      res.send(result);
     });
 
     app.post("/doctor", verifyJWT, verifyAdmin, async (req, res) => {
